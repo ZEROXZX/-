@@ -1,0 +1,136 @@
+use crate::ui::components::{card::Card, page_view::PageView, tag::Tag};
+use crate::ui::screens::about::view_model::AboutViewModel;
+use gpui::*;
+use gpui_component::{ActiveTheme, Icon, StyledExt, button::Button, h_flex, v_flex};
+
+impl Render for AboutViewModel {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        PageView::build(
+            "关于",
+            "有关应用程序及其开发的信息",
+            div()
+                .w_full()
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .w_full()
+                        .max_w(px(1200.0))
+                        .child(
+                            Card::new().child(
+                                v_flex()
+                                    .items_center()
+                                    .gap_4()
+                                    .py_8()
+                                    .text_center()
+                                    .child(
+                                        img("appIcons/in.suyogtandel.picoforge.svg")
+                                            .w(px(256.0))
+                                            .h(px(256.0)),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_2xl()
+                                            .font_bold()
+                                            .text_color(theme.foreground)
+                                            .child("PicoForge"),
+                                    )
+                                    .child(Tag::new("v0.7.1"))
+                                    .child(
+                                        div()
+                                            .text_color(theme.muted_foreground)
+                                            .max_w(px(450.0))
+                                            .child(
+                                                "用于 pico-fido 和 rs-key 安全密钥的开源调试工具。使用 Rust 和 GPUI 开发",
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(theme.muted_foreground)
+                                            .gap_1()
+                                            .pt_4()
+                                            .border_t_1()
+                                            .border_color(theme.border)
+                                            .border_t_1()
+                                            .border_color(theme.border)
+                                            .w(px(320.0))
+                                            .child(
+                                                h_flex()
+                                                    .justify_between()
+                                                    .items_start()
+                                                    .child("代码由：")
+                                                    .child(
+                                                        v_flex()
+                                                            .font_medium()
+                                                            .text_color(theme.foreground)
+                                                            .items_end()
+                                                            .child("PicoForge 贡献者，ZERO汉化"),
+                                                    ),
+                                            )
+                                            .child(
+                                                h_flex()
+                                                    .justify_between()
+                                                    .items_center()
+                                                    .pt_2()
+                                                    .mt_2()
+                                                    .child(h_flex().items_center().gap_1().child("Copyright:"))
+                                                    .child(
+                                                        div()
+                                                            .font_medium()
+                                                            .text_color(theme.foreground)
+                                                            .child("©2026 Suyog Tandel"),
+                                                    ),
+                                            ),
+                                    )
+                                    .child(
+                                        h_flex()
+                                            .gap_4()
+                                            .pt_6()
+                                            .child(
+                                                Button::new("github_btn")
+                                                    .outline()
+                                                    .bg(rgb(0x222225))
+                                                    .child(
+                                                        h_flex()
+                                                            .gap_2()
+                                                            .child(
+                                                                Icon::default()
+                                                                    .path("icons/github.svg")
+                                                                    .size_4(),
+                                                            )
+                                                            .child("GitHub"),
+                                                    )
+                                                    .on_click(|_, _, cx| {
+                                                        cx.open_url("https://github.com/librekeys/picoforge")
+                                                    }),
+                                            )
+                                            .child(
+                                                Button::new("wiki_btn")
+                                                    .outline()
+                                                    .bg(rgb(0x222225))
+                                                    .child(
+                                                        h_flex()
+                                                            .gap_2()
+                                                            .child(
+                                                                Icon::default()
+                                                                    .path("icons/book-open.svg")
+                                                                    .size_4(),
+                                                            )
+                                                            .child("Wiki"),
+                                                    )
+                                                    .on_click(|_, _, cx| {
+                                                        cx.open_url(
+                                                            "https://github.com/librekeys/picoforge/wiki",
+                                                        )
+                                                    }),
+                                            ),
+                                    ),
+                            ),
+                        ),
+                ),
+            theme,
+        )
+    }
+}
