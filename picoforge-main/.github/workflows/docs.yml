@@ -1,0 +1,58 @@
+name: Deploy Documentation
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: install dependencies (linux)
+        run: |
+          sudo apt-get update
+          sudo apt install -y \
+            pkg-config libpcsclite-dev libudev-dev libvulkan-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libxcb1-dev libxkbcommon-x11-dev libfontconfig1-dev \
+            libasound2-dev libdbus-1-dev libx11-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev libusb-1.0-0-dev
+
+      - name: Generate Documentation
+        run: cargo doc --document-private-items
+
+      - name: Create Redirect Index
+        run: |
+          CRATE_NAME=$(sed -n 's/^name = "\(.*\)"/\1/p' Cargo.toml | head -n 1 | tr '-' '_')
+          echo "<meta http-equiv=\"refresh\" content=\"0; url=${CRATE_NAME}/index.html\">" > target/doc/index.html
+
+      - name: Upload Artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: target/doc
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
