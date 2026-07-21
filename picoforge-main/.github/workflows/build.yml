@@ -1,0 +1,108 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm libxcb1-dev libgtk-3-dev libasound2-dev pkg-config libudev-dev
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build Release
+        run: cargo build --release
+      
+      - name: Package binary
+        run: |
+          mkdir -p release
+          cp target/release/picoforge release/
+          tar -czf picoforge-linux-x86_64.tar.gz -C release .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: picoforge-linux-x86_64.tar.gz
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install LLVM
+        run: choco install llvm -y
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build Release
+        run: cargo build --release
+      
+      - name: Package binary
+        run: |
+          mkdir release
+          copy target/release/picoforge.exe release/
+          Compress-Archive -Path release/* -DestinationPath picoforge-windows-x86_64.zip
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: picoforge-windows-x86_64.zip
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install LLVM
+        run: brew install llvm
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build Release
+        run: cargo build --release
+      
+      - name: Create App Bundle
+        run: |
+          mkdir -p release/PicoForge.app/Contents/MacOS
+          cp target/release/picoforge release/PicoForge.app/Contents/MacOS/
+          cp Info.plist release/PicoForge.app/Contents/
+          hdiutil create -volname PicoForge -srcfolder release -ov -format UDZO picoforge-macos-universal.dmg
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binary
+          path: picoforge-macos-universal.dmg
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            linux-binary/picoforge-linux-x86_64.tar.gz
+            windows-binary/picoforge-windows-x86_64.zip
+            macos-binary/picoforge-macos-universal.dmg
