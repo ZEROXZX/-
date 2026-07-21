@@ -1,0 +1,88 @@
+[package]
+name = "picoforge"
+version = "0.7.1"
+description = "An open source commissioning tool for pico-fido and rs-key security keys. Developed with Rust and GPUI."
+authors = ["Suyog Tandel", "PicoForge Contributers"]
+license = "AGPL-3.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"                                      # Logging facade
+log4rs = "1"                                     # For logging to output (like stdout)
+directories = "6"                                # For Applcation config/data dir handling
+
+# For device management backend:
+pcsc = "2"            # Standard Smart Card API (connect to the key)
+hex = "0.4"           # For parsing VID/PID strings
+byteorder = "1.5"     # Required for writing Big-Endian numbers (firmware requirement)
+thiserror = "2"       # Makes custom error handling much easier
+anyhow = "1"          # For easy error propagation
+# macos-shared-device opens the FIDO HID non-exclusively; without it macOS holds
+# FIDO devices exclusively and hidapi's open fails (0xE00002C5), stranding the
+# whole FIDO transport. No-op on Linux/Windows. See hid_darwin_set_open_exclusive.
+hidapi = { version = "2.6", features = ["macos-shared-device"] } # fido2 + non-standard cmds
+serde_cbor_2 = "0.13"
+rand = "0.10"
+bitflags = "2.13.0"
+base64 = "0.22"       # For PEM encoding of DER certificates
+ring = "0.17"         # For signing fido2 messages with pin token
+aes = "0.9"
+cbc = "0.2"
+
+# For Application UI:
+gpui = { version = "0.2.2", features = [] }
+gpui-component = { git = "https://github.com/librekeys/gpui-component", branch = "fix/client-window-linux" }
+# gpui-component = "0.5.1"
+rust-embed = "8.11.0"
+
+[profile.dev]
+incremental = true  # Compile your binary in smaller steps.
+codegen-units = 256
+opt-level = 1       # Prioritizes speed. Use `z` if you prefer small binary size.
+
+[profile.release]
+codegen-units = 1 # Allows LLVM to perform better optimization.
+lto = true        # Enables link-time-optimizations however is not stable.
+opt-level = 3     # Prioritizes speed. Use `z` if you prefer small binary size.
+# panic = "abort"   # Higher performance by disabling panic handlers.
+strip = true # Ensures debug symbols are removed.
+
+[target.'cfg(windows)'.build-dependencies]
+tauri-winres = "0.3"
+
+# Tauri winres config:
+[package.metadata.tauri-winres]
+FileDescription = "An open source commissioning tool for Pico FIDO security keys."
+ProductName = "PicoForge"
+OriginalFilename = "picoforge.exe"
+LegalCopyright = "Copyright © 2026 Suyog Tandel"
+
+# Cargo-Packager config:
+[package.metadata.packager]
+name = "picoforge"
+productName = "picoforge"
+description = "An open source commissioning tool for Pico FIDO security keys. Developed with Rust and GPUI."
+category = "Utility"
+authors = ["Suyog Tandel", "PicoForge Contributers"]
+identifier = "in.suyogtandel.picoforge"
+license_file = "LICENSE"
+
+icons = [
+    "./static/appIcons/icon.icns",
+    "./static/appIcons/icon.png",
+    "./static/appIcons/icon.ico",
+]
+
+[package.metadata.packager.macos]
+info_plist_path = "Info.plist"
+
+[package.metadata.packager.linux]
+generate_desktop_entry = false
+
+[package.metadata.packager.appimage]
+excluded_libraries = ["libpcsclite*.so*"]
+files = { "data/in.suyogtandel.picoforge.desktop" = "usr/share/applications/in.suyogtandel.picoforge.desktop", "static/appIcons/in.suyogtandel.picoforge-symbolic.svg" = "usr/share/icons/hicolor/symbolic/apps/in.suyogtandel.picoforge-symbolic.svg", "static/appIcons/in.suyogtandel.picoforge.svg" = "usr/share/icons/hicolor/scalable/apps/in.suyogtandel.picoforge.svg" }
+
