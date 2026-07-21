@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PicoForge
+Exec=picoforge
+Icon=in.suyogtandel.picoforge
+Terminal=false
+Categories=Utility;
+Keywords=Config;
+StartupNotify=true
+DBusActivatable=false
