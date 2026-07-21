@@ -1,0 +1,34 @@
+.DS_Store
+node_modules
+/target
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# IDE:
+.vscode
+
+# Nix
+result
+.direnv
+
+# Flatpak
+.flatpak
+.flatpak-builder
+repo
+picoforge.flatpak
+
+# misc
+docs-gpui-components
+src-svelte
+gpui-component
+packaging
+.cargo-packager
+llm-texts
+opencode.jsonc
+AGENTS.md
