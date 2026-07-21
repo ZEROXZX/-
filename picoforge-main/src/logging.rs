@@ -1,0 +1,95 @@
+//! Logging initialisation with log4rs.
+//!
+//! Sets up a rolling-file appender (10 MB per file, delete-oldest policy)
+//! and a console appender. The `picoforge` logger defaults to `Trace` in
+//! debug builds and `Info` in release builds; verbose third-party
+//! loggers (`gpui`, `gpui_component`, `blade_graphics`) are capped at
+//! `Error` to reduce noise.
+
+use directories::ProjectDirs;
+use log::LevelFilter;
+use log4rs::{
+    append::{
+        console::{ConsoleAppender, Target},
+        rolling_file::{
+            RollingFileAppender,
+            policy::compound::{
+                CompoundPolicy, roll::delete::DeleteRoller, trigger::size::SizeTrigger,
+            },
+        },
+    },
+    config::{Appender, Logger, Root},
+    encode::pattern::PatternEncoder,
+};
+use std::fs;
+
+/// Initializes log4rs with custom configuration for stdout and file logging.
+pub fn logger_init() {
+    let qual = "in";
+    let org = "suyogtandel";
+    let app = "picoforge";
+
+    // Determine the log file path using ProjectDirs for cross-platform compatibility
+    let log_file_path = {
+        let log_dir = if let Some(proj_dirs) = ProjectDirs::from(qual, org, app) {
+            proj_dirs.data_local_dir().join("logs")
+        } else {
+            eprintln!("Could not determine project directories. Falling back to local directory.");
+            std::path::PathBuf::from("logs")
+        };
+
+        if let Err(e) = fs::create_dir_all(&log_dir) {
+            eprintln!("Failed to create log directory at {:?}: {}", log_dir, e);
+        }
+
+        log_dir.join("picoforge.log")
+    };
+
+    // TODO: Add session based log files or rolling log files with archiving of old files, to prevent a single log file from growing too large.
+    let size_trigger = SizeTrigger::new(10 * 1024 * 1024); // 10 MB limit
+    let roller = DeleteRoller::new();
+    let policy = CompoundPolicy::new(Box::new(size_trigger), Box::new(roller));
+
+    // File Appender
+    let logfile = RollingFileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new(
+            "[{d(%Y-%m-%d %H:%M:%S %Z)} {l} {t}] {m}{n}",
+        )))
+        .build(log_file_path, Box::new(policy))
+        .unwrap();
+
+    // Console Appender
+    let stdout = ConsoleAppender::builder()
+        .target(Target::Stdout)
+        .encoder(Box::new(PatternEncoder::new(
+            "[{d(%Y-%m-%d %H:%M:%S %Z)} {h({l})} {t}] {m}{n}",
+        )))
+        .build();
+
+    let app_level = if cfg!(debug_assertions) {
+        LevelFilter::Trace
+    } else {
+        LevelFilter::Info
+    };
+
+    let config = log4rs::Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)))
+        .appender(Appender::builder().build("logfile", Box::new(logfile)))
+        .logger(
+            Logger::builder()
+                .appenders(["stdout", "logfile"])
+                .additive(false)
+                .build("picoforge", app_level),
+        )
+        .logger(Logger::builder().build("gpui", LevelFilter::Error))
+        .logger(Logger::builder().build("gpui_component", LevelFilter::Error))
+        .logger(Logger::builder().build("blade_graphics", LevelFilter::Error))
+        .build(
+            Root::builder()
+                .appenders(vec!["logfile", "stdout"])
+                .build(LevelFilter::Error),
+        )
+        .unwrap();
+
+    log4rs::init_config(config).unwrap();
+}
