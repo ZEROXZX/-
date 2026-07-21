@@ -1,0 +1,180 @@
+name: "publish-stable"
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["PicoForge CI"]
+    branches:
+      - release
+    types:
+      - completed
+
+jobs:
+  build-and-release:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # MacOS Builds:
+          - platform: "macos-latest"
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest"
+            args: "--target x86_64-apple-darwin"
+
+          # Linux AppImage Builds (via container):
+          - platform: "ubuntu-latest"
+            appimage_variant: "glibc-2.28-x86_64"
+            build_type: "appimage"
+          - platform: "ubuntu-latest"
+            appimage_variant: "musl-x86_64"
+            build_type: "appimage"
+          - platform: "ubuntu-24.04-arm"
+            appimage_variant: "glibc-2.28-aarch64"
+            build_type: "appimage"
+          - platform: "ubuntu-24.04-arm"
+            appimage_variant: "musl-aarch64"
+            build_type: "appimage"
+
+          # Linux Flatpak Builds:
+          - platform: "ubuntu-latest"
+            args: ""
+            build_type: "flatpak"
+          - platform: "ubuntu-24.04-arm"
+            args: ""
+            build_type: "flatpak"
+
+          # Windows Builds:
+          - platform: "windows-latest"
+            args: "--target x86_64-pc-windows-msvc"
+          - platform: "windows-latest"
+            args: "--target i686-pc-windows-msvc"
+          - platform: "windows-latest"
+            args: "--target aarch64-pc-windows-msvc"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        if: runner.os != 'Linux'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: >
+            ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' ||
+            matrix.platform == 'windows-latest' && 'x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc' || '' }}
+
+      - name: Cache Cargo registry and target
+        if: runner.os != 'Linux'
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.platform }}-${{ matrix.args }}
+
+      - name: Extract version from Cargo.toml
+        id: get_version
+        shell: bash
+        run: |
+          cargo_file="Cargo.toml"
+          version=$(grep -m 1 '^version' "$cargo_file" | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+          echo "Version found: $version"
+          echo "version=$version" >> $GITHUB_ENV
+
+      - name: Install cargo-packager
+        if: runner.os != 'Linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-packager
+
+      - name: Build Binary
+        if: runner.os != 'Linux'
+        run: cargo build --release ${{ matrix.args }}
+
+      - name: Build and Package
+        if: runner.os != 'Linux'
+        run: cargo packager --release ${{ matrix.args }}
+
+      - name: Build AppImage
+        if: matrix.build_type == 'appimage'
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/picoforge-appimage-builder:${{ matrix.appimage_variant }}"
+          echo "Pulling container: ${IMAGE_NAME}"
+          podman pull "${IMAGE_NAME}"
+          mkdir -p target/release
+          chmod +x .github/scripts/build_appimage.sh
+          echo "Running build inside container..."
+          podman run --rm \
+            -e GITHUB_REPOSITORY_OWNER \
+            -e GITHUB_REPOSITORY \
+            -v "${{ github.workspace }}":/workspace:z \
+            "${IMAGE_NAME}" \
+            /workspace/.github/scripts/build_appimage.sh ${{ matrix.appimage_variant }}
+
+      - name: Build Flatpak
+        if: matrix.build_type == 'flatpak'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder appstream
+          chmod +x .github/scripts/build_flatpak.sh
+          ./.github/scripts/build_flatpak.sh ${{ matrix.platform }}
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ env.version }}
+          name: "PicoForge-v${{ env.version }}"
+          body: |
+            > [!WARNING]
+            > This is a Beta release and thus can have some bugs, report them using github issues.
+
+            #### Check the Installation guide for the Application on the wiki: https://github.com/librekeys/picoforge/wiki/Installation
+          prerelease: false
+          files: |
+            *.flatpak
+            target/release/*.appimage
+            target/release/*.AppImage
+            target/release/*.zsync
+            target/release/*.msi
+            target/release/*.dmg
+            target/release/*.app
+            target/x86_64-apple-darwin/release/*.dmg
+            target/aarch64-apple-darwin/release/*.dmg
+            target/x86_64-apple-darwin/release/*.app
+            target/aarch64-apple-darwin/release/*.app
+            target/x86_64-pc-windows-msvc/release/*.msi
+            target/x86_64-pc-windows-msvc/release/*-setup.exe
+            target/i686-pc-windows-msvc/release/*.msi
+            target/i686-pc-windows-msvc/release/*-setup.exe
+            target/aarch64-pc-windows-msvc/release/*.msi
+            target/aarch64-pc-windows-msvc/release/*-setup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-spec:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Sync Spec Version & Tag
+        run: |
+          chmod +x .github/scripts/sync_spec_version.sh
+          podman run --rm \
+            --security-opt label=disable \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            -e GITHUB_TOKEN=$GITHUB_TOKEN \
+            -e GITHUB_REPOSITORY=$GITHUB_REPOSITORY \
+            fedora:latest \
+            /workspace/.github/scripts/sync_spec_version.sh
